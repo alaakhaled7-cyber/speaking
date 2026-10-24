@@ -104,7 +104,15 @@ function start(){
       var src = ctx.createMediaStreamSource(s); an = ctx.createAnalyser(); an.fftSize = 1024; src.connect(an);
       meter();
     } catch (e) { R.errors.push('audio: ' + e.message); }
-    run();
+    // Step 3 first (about 4 s), then the microphone goes to speech recognition only, like on the quiz page on phones.
+    set('t3', 'wait', 'say something…');
+    setTimeout(function(){
+      cancelAnimationFrame(raf);
+      try { stream.getTracks().forEach(function(t){ t.stop(); }); } catch (e) {}
+      try { ctx && ctx.close(); } catch (e) {} ctx = null;
+      if (R.level < 8) set('t3', 'bad', 'too quiet');
+      run();
+    }, 4000);
   }).catch(function(e){
     set('t2', 'bad', 'blocked'); R.mic = 'blocked: ' + (e.name || '') + ' ' + (e.message || '');
     finish();
@@ -118,7 +126,7 @@ function meter(){
     var rms = Math.sqrt(sum / buf.length), pct = Math.min(100, Math.round(rms * 400));
     $('lvl').style.width = pct + '%';
     if (pct > R.level) R.level = pct;
-    if (R.level >= 8) set('t3', 'ok', 'yes'); else if (running) set('t3', 'wait', 'speak louder');
+    if (R.level >= 8) set('t3', 'ok', 'yes');
     raf = requestAnimationFrame(loop);
   })();
 }
@@ -133,7 +141,7 @@ function run(){
   listen(true);
 }
 function listen(first){
-  rec = new SR(); rec.lang = 'en-US'; rec.interimResults = true; rec.continuous = true;
+  rec = new SR(); rec.lang = 'en-US'; rec.interimResults = true; rec.continuous = !/Android/i.test(navigator.userAgent);
   rec.onresult = function(ev){
     var interim = '';
     for (var i = ev.resultIndex; i < ev.results.length; i++) {
