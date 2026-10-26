@@ -307,7 +307,7 @@
 
 <main><div class="wrap" id="app"><p class="loading">Loading…</p></div></main>
 
-<footer><div class="wrap" id="foot"></div><div class="wrap" style="font-size:11px;color:var(--muted);padding-top:0">Website version 24 Oct 2026 (b)</div></footer>
+<footer><div class="wrap" id="foot"></div><div class="wrap" style="font-size:11px;color:var(--muted);padding-top:0">Website version 26 Oct 2026</div></footer>
 
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-hidden="true"></aside>
@@ -324,7 +324,11 @@ var app = document.getElementById('app');
 var state = {};
 function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 function toast(msg){ var t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(toast._t); toast._t=setTimeout(function(){ t.style.display='none'; }, 3000); }
-function errMsg(e){ var m = (e && e.message) || String(e); return m.replace(/^Error:\s*/, ''); }
+function errMsg(e){
+  var m = (e && e.message) || (e ? String(e) : ''); m = m.replace(/^Error:\s*/, '');
+  if (!m || /undefined|null|Failed to fetch|NetworkError|Load failed|Unexpected token|JSON/i.test(m)) return 'The connection to the website failed. Check your internet and press the button again, or refresh the page. Your answers on this page are kept.';
+  return m;
+}
 function lstore(k, v){ try{ if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); }catch(e){ return null; } }
 function modal(html, okText, onOk){
   var m = document.createElement('div'); m.className = 'modal';
@@ -380,6 +384,7 @@ function lsLink(key){
 function lsVoices(){
   if (!window.speechSynthesis) return [];
   var all = speechSynthesis.getVoices().filter(function(v){ return /^en[-_]/i.test(v.lang); });
+  var local = all.filter(function(v){ return v.localService; }); if (local.length) all = local;   // online voices often stay silent on phones
   all.sort(function(a, b){ var s = function(v){ return (/en[-_](GB|US)/i.test(v.lang) ? 0 : 1) + (v.localService ? 0 : 0.5); }; return s(a) - s(b); });
   return all;
 }
@@ -390,9 +395,13 @@ function lsSay(text, opt){
     var u = new SpeechSynthesisUtterance(text), vs = lsVoices();
     u.lang = 'en-US'; u.rate = opt.rate || 0.9; u.pitch = opt.pitch || 1;
     if (opt.voice !== undefined && vs.length) u.voice = vs[opt.voice % vs.length];
-    var done = false, fin = function(){ if (!done){ done = true; res(); } };
-    u.onend = fin; u.onerror = fin;
-    setTimeout(fin, 1500 + text.length * 110);   // some phones never fire "end"
+    var done = false, began = false, ka = null, fin = function(){ if (!done){ done = true; clearInterval(ka); res(); } };
+    u.onstart = function(){ began = true; LS.soundOk = true; };
+    u.onend = fin; u.onerror = function(){ LS.soundFail = (LS.soundFail || 0) + 1; fin(); };
+    ka = setInterval(function(){ try { if (speechSynthesis.paused) speechSynthesis.resume(); } catch (e) {} }, 1000);   // Chrome sometimes pauses by itself
+    setTimeout(function(){ if (!began && !speechSynthesis.speaking){ LS.soundFail = (LS.soundFail || 0) + 1; fin(); } }, 3000);   // the voice never started
+    setTimeout(fin, 4000 + text.length * 120);   // some phones never fire "end"
+    try { if (speechSynthesis.paused) speechSynthesis.resume(); } catch (e) {}
     speechSynthesis.speak(u);
   });
 }
@@ -504,12 +513,12 @@ function lsView(){
   }).catch(function(e){
     var m = errMsg(e);
     if (m.indexOf('PART1_FIRST') > -1) app.innerHTML = '<div class="none"><strong>Please do Part 1 of this quiz first.</strong><br>Part 2 (listening and speaking) opens after you submit Part 1. <a href="' + BASE + '?quiz=' + encodeURIComponent(QUIZKEY) + '">Open Part 1</a></div>';
-    else app.innerHTML = '<div class="err">' + esc(m) + '</div>';
+    else app.innerHTML = '<div class="err">' + esc(m) + '</div><button class="btn" onclick="location.reload()">Try again</button>';
   });
 }
 function lsLoadReview(sid, aiNow){
   app.innerHTML = '<p class="loading">Loading your result…</p>';
-  call('getMySpeaking', QUIZKEY, sid).then(function(r){ lsRenderReview(r, aiNow, sid); }).catch(function(e){ app.innerHTML = '<div class="err">' + esc(errMsg(e)) + '</div>'; });
+  call('getMySpeaking', QUIZKEY, sid).then(function(r){ lsRenderReview(r, aiNow, sid); }).catch(function(e){ app.innerHTML = '<div class="err">' + esc(errMsg(e)) + '</div><button class="btn" onclick="location.reload()">Try again</button>'; });
 }
 function lsIntro(t){
   var SR = lsSR(), tts = !!window.speechSynthesis, nB = t.speak.length;
@@ -533,16 +542,27 @@ function lsListening(t){
   var L = t.listen, plays = 2, dplays = 2, playing = false;
   app.innerHTML = '<div class="paper"><div class="secbar" style="margin-top:-26px;border-radius:12px 12px 0 0">🎧 Listening: ' + esc(L.title) + '</div>' +
     '<p>Press play and listen. You can listen <b>2 times</b>. Then answer the questions.</p>' +
+    '<p class="muted" style="font-size:13px;margin:0 0 8px">🔊 Turn the volume up. iPhone: switch off silent mode (the switch on the side). Bluetooth headphones: connect them before you press play.</p>' +
     '<button class="btn" id="lsplay">▶ Play the recording (2 left)</button> <span id="lsnow" class="muted"></span>' +
+    '<div id="lsnosnd" style="margin-top:8px"><a href="#" id="lsnoshow" style="font-size:13px">🔇 I can\'t hear anything</a></div>' +
     L.qs.map(function(x, i){ return '<div class="qitem" id="lq' + i + '"><div class="qt">' + (i + 1) + '. ' + esc(x.q) + '</div>' + x.options.map(function(o, j){
       return '<label class="opt"><input type="radio" name="lq' + i + '" value="' + j + '"><span>' + 'abc'.charAt(j) + '. ' + esc(o) + '</span></label>'; }).join('') + '</div>'; }).join('') +
     '<div class="qitem" id="ldict"><div class="qt">5. Dictation: listen and write the sentence.</div><button class="btn small ghost" id="lsdplay">▶ Play the sentence (2 left)</button>' +
     '<input id="lsdict" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Write what you hear…" style="margin-top:8px"></div>' +
     '<button class="btn red" id="lsnext">Next: Speaking</button></div>';
-  var pb = document.getElementById('lsplay'), db = document.getElementById('lsdplay');
+  var pb = document.getElementById('lsplay'), db = document.getElementById('lsdplay'), noSound = false;
+  var showText = function(auto){
+    var box = document.getElementById('lsnosnd'); if (!box || noSound) return;
+    box.innerHTML = '<div class="err" style="margin:0"><b>' + (auto ? 'Your phone did not play the sound.' : 'No sound?') + '</b> Turn the volume up (iPhone: silent mode off) and press play again. If it still does not work, read the text instead.' +
+      '<br><button class="btn small" id="lstext" style="margin-top:8px">Show the text instead</button></div>';
+    document.getElementById('lstext').onclick = function(){ noSound = true; if (window.speechSynthesis) speechSynthesis.cancel();
+      box.innerHTML = '<div class="aibox"><b>' + esc(L.title) + '</b><br>' + L.lines.map(function(l){ return '<b>' + esc(l[0]) + ':</b> ' + esc(l[1]); }).join('<br>') + '</div>' +
+        '<p class="muted" style="font-size:13px">Dictation (number 5): write this sentence: <b>' + esc(L.dict) + '</b></p>'; };
+  };
+  document.getElementById('lsnoshow').onclick = function(e){ e.preventDefault(); showText(false); };
   pb.onclick = function(){
     if (playing || plays <= 0) return; playing = true; plays--; pb.disabled = true; document.getElementById('lsnow').textContent = 'Playing…';
-    lsPlayLines(L.lines, /STR|BG1/.test(t.level)).then(function(){ playing = false; pb.disabled = plays <= 0; pb.textContent = plays > 0 ? '▶ Play again (1 left)' : 'No more plays'; document.getElementById('lsnow').textContent = ''; });
+    lsPlayLines(L.lines, /STR|BG1/.test(t.level)).then(function(){ if (!LS.soundOk) showText(true); playing = false; pb.disabled = plays <= 0 && LS.soundOk; pb.textContent = plays > 0 ? '▶ Play again (1 left)' : 'No more plays'; document.getElementById('lsnow').textContent = ''; });
   };
   db.onclick = function(){
     if (playing || dplays <= 0) return; playing = true; dplays--; db.disabled = true;
@@ -552,7 +572,7 @@ function lsListening(t){
   document.getElementById('lsnext').onclick = function(){
     var ans = L.qs.map(function(x, i){ var c = app.querySelector('input[name="lq' + i + '"]:checked'); return c ? Number(c.value) : null; });
     var miss = ans.filter(function(a){ return a === null; }).length + (document.getElementById('lsdict').value.trim() ? 0 : 1);
-    var go = function(){ if (window.speechSynthesis) speechSynthesis.cancel(); lsSpeakStart(t, { ans: ans, dict: document.getElementById('lsdict').value.trim(), plays: 2 - plays }); };
+    var go = function(){ if (window.speechSynthesis) speechSynthesis.cancel(); lsSpeakStart(t, { ans: ans, dict: document.getElementById('lsdict').value.trim(), plays: 2 - plays, noSound: noSound || (!LS.soundOk && !!LS.soundFail) }); };
     if (miss) modal('<h3>Some answers are empty</h3><p>You cannot come back to the listening. Go on to speaking?</p>', 'Yes, go on', go); else go();
   };
 }
