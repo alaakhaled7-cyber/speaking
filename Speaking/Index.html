@@ -307,7 +307,7 @@
 
 <main><div class="wrap" id="app"><p class="loading">Loading…</p></div></main>
 
-<footer><div class="wrap" id="foot"></div><div class="wrap" style="font-size:11px;color:var(--muted);padding-top:0">Website version 26 Oct 2026</div></footer>
+<footer><div class="wrap" id="foot"></div><div class="wrap" style="font-size:11px;color:var(--muted);padding-top:0">Website version 27 Oct 2026</div></footer>
 
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-hidden="true"></aside>
@@ -326,6 +326,7 @@ function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(
 function toast(msg){ var t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(toast._t); toast._t=setTimeout(function(){ t.style.display='none'; }, 3000); }
 function errMsg(e){
   var m = (e && e.message) || (e ? String(e) : ''); m = m.replace(/^Error:\s*/, '');
+  if (m.indexOf('ID_LOCKED') > -1) return 'This Student ID is already used on another phone or browser. If it is your own ID, ask your instructor to unlock it, then try again. Using another student\'s ID is not allowed and is recorded.';
   if (!m || /undefined|null|Failed to fetch|NetworkError|Load failed|Unexpected token|JSON/i.test(m)) return 'The connection to the website failed. Check your internet and press the button again, or refresh the page. Your answers on this page are kept.';
   return m;
 }
@@ -348,7 +349,7 @@ function spark(trend){
 }
 function myStu(){ return SID ? { sid: SID } : null; }
 function call(fn){
-  var args = [].slice.call(arguments, 1);
+  var args = devArgs(fn, [].slice.call(arguments, 1));
   return fetch(API, { method: 'POST', body: JSON.stringify({ fn: fn, args: args }), redirect: 'follow' })
     .then(function(r){ return r.json(); }).then(function(j){ if (j.err) throw new Error(j.err); return j.ok; });
 }
@@ -356,6 +357,24 @@ function call(fn){
    Practice only (not in the quiz mark). Uses the browser's own voice (speechSynthesis), speech recognition and Web Audio.
    No audio is recorded or uploaded: only the words the browser recognised and simple timing measures. */
 var LS = { leaves: 0, ended: false, active: false, recs: [] };
+/* ID lock: this browser's own key, sent with the student's ID (the first phone that uses an ID keeps it). */
+var DEV = (function(){ var u = ''; try { u = (typeof PRM !== 'undefined' && PRM.get('dev')) || ''; } catch (e) {} u = String(u).replace(/[^\w-]/g, '').slice(0, 40);
+  var d = lstore('dev'); if (u && u !== d){ lstore('dev', u); d = u; }
+  if (!d){ d = 'd' + Math.random().toString(36).slice(2, 12) + Date.now().toString(36); lstore('dev', d); } return d; })();
+function devFp(){
+  var u = navigator.userAgent || '', os = (u.match(/Android [\d.]+(; [^;)]+)?/) || u.match(/iPhone|iPad|Windows NT [\d.]+|Mac OS X|CrOS|Linux/) || [''])[0];
+  var br = /Edg\//.test(u) ? 'Edge' : /SamsungBrowser/.test(u) ? 'Samsung Internet' : /OPR\//.test(u) ? 'Opera' : /Firefox|FxiOS/.test(u) ? 'Firefox' : /CriOS|Chrome/.test(u) ? 'Chrome' : /Safari/.test(u) ? 'Safari' : 'Other';
+  var tz = ''; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) {}
+  return [os, br, screen.width + 'x' + screen.height + '@' + (window.devicePixelRatio || 1), (navigator.hardwareConcurrency || '') + 'c', tz].join(' · ');
+}
+var DEVFN = { lookupStudent: 1, getCatalog: 3, getQuiz: 4, getMyResult: 2, getMyResults: 2, getFixQuiz: 3, getListenSpeak: 2, getMySpeaking: 2 };
+function devArgs(fn, args){
+  var me = null; try { me = typeof myStu === 'function' ? myStu() : null; } catch (e) {}
+  if (me && me.preview) return args;                       // instructor preview: no lock
+  if (DEVFN[fn] !== undefined){ while (args.length < DEVFN[fn]) args.push(''); args.push(DEV, devFp()); }
+  else if ((fn === 'submitQuiz' || fn === 'submitListenSpeak') && args[0]){ args[0].dev = DEV; args[0].fp = devFp(); }
+  return args;
+}
 function lsSR(){ return window.SpeechRecognition || window.webkitSpeechRecognition || null; }
 /* Phones (Android, iPhone): speech recognition needs the microphone to itself, so the voice meter is not used there. */
 var LS_AND = /Android/i.test(navigator.userAgent), LS_MOB = LS_AND || /iPhone|iPad|iPod/i.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
@@ -376,7 +395,7 @@ function lsMicHelp(){
 }
 function lsLink(key){
   var me = (typeof myStu === 'function' && myStu()) || {};
-  if (SPEAKPAGE && me.sid) return SPEAKPAGE + (SPEAKPAGE.indexOf('?') > -1 ? '&' : '?') + 'quiz=' + encodeURIComponent(key) + '&sid=' + encodeURIComponent(me.sid) + '&api=' + encodeURIComponent(BASE);
+  if (SPEAKPAGE && me.sid) return SPEAKPAGE + (SPEAKPAGE.indexOf('?') > -1 ? '&' : '?') + 'quiz=' + encodeURIComponent(key) + '&sid=' + encodeURIComponent(me.sid) + '&dev=' + encodeURIComponent(DEV) + '&api=' + encodeURIComponent(BASE);
   return BASE + '?quiz=' + encodeURIComponent(key) + '&part=ls';
 }
 
