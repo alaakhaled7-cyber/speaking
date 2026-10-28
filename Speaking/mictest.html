@@ -1,199 +1,29 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" translate="no" class="notranslate">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="google" content="notranslate">
 <title>Speak Up · Microphone test</title>
-<style>
-:root{--ink:#1d2433;--muted:#667085;--line:#e4e7ec;--ok:#067647;--okbg:#ecfdf3;--bad:#b42318;--badbg:#fef3f2;--warn:#b54708;--warnbg:#fffaeb;--brand:#1f4e9c}
-*{box-sizing:border-box}
-body{margin:0;font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink);background:#f6f7fb}
-.wrap{max-width:640px;margin:0 auto;padding:16px}
-h1{font-size:22px;margin:8px 0 4px;color:var(--brand)}
-p.sub{color:var(--muted);margin:0 0 16px}
-.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
-.row{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
-.row:last-child{border-bottom:0}
-.tag{font-size:13px;font-weight:600;padding:2px 10px;border-radius:99px;white-space:nowrap}
-.ok{color:var(--ok);background:var(--okbg)}.bad{color:var(--bad);background:var(--badbg)}.wait{color:var(--warn);background:var(--warnbg)}.idle{color:var(--muted);background:#f2f4f7}
-button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:12px 18px;background:var(--brand);color:#fff;cursor:pointer;width:100%}
-button.ghost{background:#fff;color:var(--brand);border:1px solid var(--brand);margin-top:8px}
-button:disabled{opacity:.5;cursor:default}
-.meter{height:14px;background:#eef1f6;border-radius:99px;overflow:hidden;margin-top:6px}
-.meter div{height:100%;width:0;background:linear-gradient(90deg,#32d583,#fdb022,#f04438);transition:width .08s}
-#said{min-height:70px;background:#f9fafb;border:1px dashed var(--line);border-radius:10px;padding:10px;margin-top:8px}
-#said i{color:var(--muted)}
-.rec{display:inline-block;width:10px;height:10px;border-radius:50%;background:#f04438;margin-right:6px;animation:b 1s infinite}
-@keyframes b{50%{opacity:.2}}
-.big{font-size:20px;font-weight:700;margin:4px 0}
-small{color:var(--muted)}
-pre{white-space:pre-wrap;font-size:12px;background:#f9fafb;padding:8px;border-radius:8px;margin:8px 0 0}
-</style>
 </head>
-<body>
-<div class="wrap">
-  <h1>Microphone test</h1>
-  <p class="sub">This checks if the speaking part can work on this phone or laptop. Nothing is recorded or saved except the test result.</p>
-
-  <div class="card">
-    <div class="row"><span>Device &amp; browser</span><span id="dev" class="tag idle">…</span></div>
-    <div class="row"><span>1. Speech recognition available</span><span id="t1" class="tag idle">not checked</span></div>
-    <div class="row"><span>2. Microphone allowed</span><span id="t2" class="tag idle">not checked</span></div>
-    <div class="row"><span>3. Voice level heard</span><span id="t3" class="tag idle">not checked</span></div>
-    <div class="row"><span>4. Words turned into text</span><span id="t4" class="tag idle">not checked</span></div>
-    <div class="row"><span>5. Restarts after a pause</span><span id="t5" class="tag idle">not checked</span></div>
-    <div class="row"><span>6. "Listen" voice plays</span><span id="t6" class="tag idle">not checked</span></div>
-  </div>
-
-  <div class="card">
-    <button id="go">Start the test (30 seconds)</button>
-    <div id="live" style="display:none;margin-top:12px">
-      <div><span class="rec"></span><b id="cd">30</b> seconds left — read this aloud, then stay silent for 3 seconds, then read it again:</div>
-      <p class="big">"I study at Sinai University. My favourite subject is English."</p>
-      <small>Voice level</small>
-      <div class="meter"><div id="lvl"></div></div>
-      <small>What the browser heard</small>
-      <div id="said"><i>…</i></div>
-    </div>
-    <button id="tts" class="ghost">6. Press to hear a word (“pronunciation”)</button>
-  </div>
-
-  <div class="card" id="res" style="display:none">
-    <div class="big" id="verdict"></div>
-    <div id="advice"></div>
-    <pre id="detail"></pre>
-    <small id="sent"></small>
-  </div>
-</div>
+<body style="margin:0;font:16px/1.5 system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:#1B2733;background:#F3F6F9">
+<p id="m" style="padding:28px 20px;margin:0">Loading…</p>
 <script>
-var R = { dev: '', sr: '', mic: '', level: 0, text: '', restarts: 0, tts: '', errors: [] };
-function $(id){ return document.getElementById(id); }
-function set(id, cls, txt){ var e = $(id); e.className = 'tag ' + cls; e.textContent = txt; }
-function device(){
-  var u = navigator.userAgent, d = /iPhone|iPad/.test(u) ? 'iPhone/iPad' : /Android/.test(u) ? 'Android' : /Mac/.test(u) ? 'Mac' : /Windows/.test(u) ? 'Windows' : 'Other';
-  var b = /EdgA?\//.test(u) ? 'Edge' : /SamsungBrowser/.test(u) ? 'Samsung Internet' : /Firefox|FxiOS/.test(u) ? 'Firefox' : /CriOS/.test(u) ? 'Chrome (iOS)' : /Chrome\//.test(u) ? 'Chrome' : /Safari\//.test(u) ? 'Safari' : 'Other';
-  return d + ' · ' + b;
-}
-R.dev = device(); set('dev', 'idle', R.dev);
-var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-if (SR) { set('t1', 'ok', 'yes'); R.sr = 'yes'; } else { set('t1', 'bad', 'no'); R.sr = 'no'; }
-
-var stream, ctx, an, raf, rec, running = false, endAt = 0, finalText = '', lastSilence = 0;
-$('go').onclick = start;
-$('tts').onclick = function(){
-  if (!window.speechSynthesis) { set('t6', 'bad', 'not supported'); R.tts = 'no'; return; }
-  try {
-    var u = new SpeechSynthesisUtterance('pronunciation'); u.lang = 'en-US'; u.rate = 0.9;
-    u.onstart = function(){ set('t6', 'ok', 'yes'); R.tts = 'yes'; };
-    u.onerror = function(e){ set('t6', 'bad', 'error: ' + (e.error || '')); R.tts = 'error ' + (e.error || ''); };
-    speechSynthesis.cancel(); speechSynthesis.speak(u);
-    set('t6', 'wait', 'did you hear it?');
-  } catch (e) { set('t6', 'bad', 'error'); R.tts = 'error'; }
-};
-
-function start(){
-  $('go').disabled = true; $('res').style.display = 'none';
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    set('t2', 'bad', 'not supported'); R.mic = 'not supported'; return finish();
+/* Speak Up loader: the page itself comes from the quiz website, so this file never needs updating. */
+(function () {
+  var DEF = 'https://script.google.com/macros/s/AKfycbxw4GLLZtkOmrLA_UInwhpSyZ8qzhQeG_zMO_AkM7sm7L_RPRnvZOo0Rm_psy202MXAlQ/exec';
+  var api = new URLSearchParams(location.search).get('api') || DEF;
+  if (!/^https:\/\/script\.google\.com\/(a\/macros\/[^\/]+|macros)\/s\/[\w-]+\/(exec|dev)$/.test(api)) api = DEF;
+  window.LOADER_API = api;
+  function fail() { document.getElementById('m').innerHTML = 'The page could not load. Check your internet, then <a href="#" onclick="location.reload();return false">try again</a>.'; }
+  function go(n) {
+    fetch(api, { method: 'POST', body: JSON.stringify({ fn: 'micPageHtml', args: [] }) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { if (!j || !j.ok) throw new Error((j && j.err) || 'empty'); document.open(); document.write(j.ok); document.close(); })
+      .catch(function () { if (n < 3) setTimeout(function () { go(n + 1); }, 1500 * (n + 1)); else fail(); });
   }
-  set('t2', 'wait', 'asking…');
-  navigator.mediaDevices.getUserMedia({ audio: true }).then(function(s){
-    stream = s; set('t2', 'ok', 'yes'); R.mic = 'yes';
-    try {
-      ctx = new (window.AudioContext || window.webkitAudioContext)();
-      var src = ctx.createMediaStreamSource(s); an = ctx.createAnalyser(); an.fftSize = 1024; src.connect(an);
-      meter();
-    } catch (e) { R.errors.push('audio: ' + e.message); }
-    // Step 3 first (about 4 s), then the microphone goes to speech recognition only, like on the quiz page on phones.
-    set('t3', 'wait', 'say something…');
-    setTimeout(function(){
-      cancelAnimationFrame(raf);
-      try { stream.getTracks().forEach(function(t){ t.stop(); }); } catch (e) {}
-      try { ctx && ctx.close(); } catch (e) {} ctx = null;
-      if (R.level < 8) set('t3', 'bad', 'too quiet');
-      run();
-    }, 4000);
-  }).catch(function(e){
-    set('t2', 'bad', 'blocked'); R.mic = 'blocked: ' + (e.name || '') + ' ' + (e.message || '');
-    finish();
-  });
-}
-function meter(){
-  var buf = new Uint8Array(an.fftSize);
-  (function loop(){
-    an.getByteTimeDomainData(buf); var sum = 0;
-    for (var i = 0; i < buf.length; i++) { var v = (buf[i] - 128) / 128; sum += v * v; }
-    var rms = Math.sqrt(sum / buf.length), pct = Math.min(100, Math.round(rms * 400));
-    $('lvl').style.width = pct + '%';
-    if (pct > R.level) R.level = pct;
-    if (R.level >= 8) set('t3', 'ok', 'yes');
-    raf = requestAnimationFrame(loop);
-  })();
-}
-function run(){
-  if (!SR) { set('t4', 'bad', 'not supported'); set('t5', 'bad', 'not supported'); setTimeout(finish, 3000); return; }
-  running = true; endAt = Date.now() + 30000; $('live').style.display = 'block';
-  set('t4', 'wait', 'listening…'); set('t5', 'wait', 'waiting…');
-  var tick = setInterval(function(){
-    var left = Math.max(0, Math.ceil((endAt - Date.now()) / 1000)); $('cd').textContent = left;
-    if (!left) { clearInterval(tick); running = false; try { rec.stop(); } catch (e) {} setTimeout(finish, 1200); }
-  }, 250);
-  listen(true);
-}
-function listen(first){
-  rec = new SR(); rec.lang = 'en-US'; rec.interimResults = true; rec.continuous = !/Android/i.test(navigator.userAgent);
-  rec.onresult = function(ev){
-    var interim = '';
-    for (var i = ev.resultIndex; i < ev.results.length; i++) {
-      if (ev.results[i].isFinal) finalText += ev.results[i][0].transcript + ' ';
-      else interim += ev.results[i][0].transcript;
-    }
-    R.text = (finalText + interim).trim();
-    $('said').innerHTML = R.text ? esc(finalText) + '<i>' + esc(interim) + '</i>' : '<i>…</i>';
-    if (R.text) set('t4', 'ok', 'yes');
-  };
-  rec.onerror = function(e){ R.errors.push('speech: ' + e.error); if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { set('t4', 'bad', 'blocked'); running = false; } };
-  rec.onend = function(){
-    if (running && Date.now() < endAt - 500) {
-      R.restarts++; set('t5', 'ok', 'yes (' + R.restarts + ')');
-      try { listen(false); } catch (e) { R.errors.push('restart: ' + e.message); set('t5', 'bad', 'failed'); }
-    }
-  };
-  try { rec.start(); } catch (e) { R.errors.push('start: ' + e.message); set('t4', 'bad', 'error'); }
-}
-function finish(){
-  running = false; cancelAnimationFrame(raf);
-  try { stream && stream.getTracks().forEach(function(t){ t.stop(); }); } catch (e) {}
-  try { ctx && ctx.close(); } catch (e) {}
-  if (R.sr === 'yes' && !R.text && $('t4').textContent.indexOf('blocked') < 0) set('t4', 'bad', 'nothing heard');
-  if (R.sr === 'yes' && R.mic === 'yes' && !R.restarts) set('t5', 'idle', 'not needed');
-  var good = R.sr === 'yes' && R.mic === 'yes' && !!R.text;
-  $('res').style.display = 'block'; $('go').disabled = false; $('go').textContent = 'Run the test again';
-  $('verdict').innerHTML = good ? '✅ Speaking works on this device' : '❌ Speaking does not work here';
-  $('verdict').style.color = good ? 'var(--ok)' : 'var(--bad)';
-  $('advice').innerHTML = good ? 'Words recognised: <b>' + R.text.split(/\s+/).length + '</b>. Remember to press button 6 to check the "Listen" voice.'
-    : (R.sr === 'no' ? 'This browser has no speech recognition. Try Chrome (Android/laptop) or Safari (iPhone).'
-    : R.mic !== 'yes' ? 'The microphone was blocked. If you pressed "Allow" and it is still blocked, the website frame is blocking it — tell Claude.'
-    : 'The microphone works but no words came through. Check the internet connection and try again.') + (good ? '' : help());
-  var detail = 'Device: ' + R.dev + '\nSpeech recognition: ' + R.sr + '\nMicrophone: ' + R.mic + '\nMax voice level: ' + R.level +
-    '\nRestarts: ' + R.restarts + '\nListen voice: ' + (R.tts || 'not tried') + '\nHeard: ' + (R.text || '(nothing)').slice(0, 200) +
-    (R.errors.length ? '\nErrors: ' + R.errors.join('; ') : '');
-  $('detail').textContent = detail;
-  $('sent').textContent = 'Saving the result…';
-  var API = new URLSearchParams(location.search).get('api') || '';
-  if (/^https:\/\/script\.google\.com\/(a\/macros\/[^\/]+|macros)\/s\/[\w-]+\/(exec|dev)$/.test(API))
-    fetch(API, { method: 'POST', body: JSON.stringify({ fn: 'logMicTest', args: [(good ? 'WORKS (speaking page)' : 'BLOCKED (speaking page)') + ' | ' + detail.replace(/\n/g, ' | ')] }) })
-      .then(function(){ $('sent').textContent = 'Result saved to the Activity log.'; }).catch(function(){ $('sent').textContent = 'Please take a screenshot of this result.'; });
-  else $('sent').textContent = 'Please take a screenshot of this result.';
-}
-function help(){
-  var u = navigator.userAgent, ios = /iPhone|iPad/.test(u), and = /Android/.test(u);
-  return '<div style="background:#f2f4f7;border-radius:10px;padding:10px 14px;margin-top:10px"><b>How to allow the microphone</b><ol style="margin:6px 0 0 18px;padding:0">' +
-    (ios ? '<li>iPhone Settings → General → Keyboard: turn on <b>Enable Dictation</b>.</li><li>Settings → Safari → Microphone: <b>Ask</b> or <b>Allow</b>.</li><li>In Safari tap <b>aA</b> → Website Settings → Microphone → <b>Allow</b>.</li><li>Close the tab, open the link again and run the test.</li>'
-     : and ? '<li>Use <b>Chrome</b>, not an in-app browser.</li><li>Tap the icon left of the address → Permissions → Microphone → <b>Allow</b>.</li><li>Phone Settings → Apps → Chrome → Permissions → Microphone → <b>Allow</b>.</li>'
-     : '<li>Click the icon left of the address bar → Microphone → <b>Allow</b>, then reload.</li><li>Check no other app (Zoom, Teams) is using the microphone.</li>') + '</ol></div>';
-}
-function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  go(0);
+})();
 </script>
 </body>
 </html>
